@@ -52,6 +52,8 @@ To install `makeself`: [Makeself Website](https://makeself.io/)
     ```
 
    The installer will set up the necessary command line utilities and add the program to your system's applications database.
+    + CLI Utility : archsetup
+    + Desktop App: Arch Setup
 
 5. **Manual Linux environment setup (optional)**:
 
