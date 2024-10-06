@@ -624,7 +624,7 @@ void setupShell() {
   std::cout << INPUT_COLOR << "Installing Homebrew...\n" << RESET_COLOR;
   runCommand(homebrewInstallCommand);
 
-  // Source Homebrew 
+  // Source Homebrew
   std::string sourceHomebrewCommand = "eval $(/opt/homebrew/bin/brew shellenv)";
   if (isCommandSuccessful(sourceHomebrewCommand)) {
     std::cout << SUCCESS_COLOR

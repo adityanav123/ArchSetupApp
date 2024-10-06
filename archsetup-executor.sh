@@ -18,8 +18,8 @@ request_sudo_access() {
 compile_binary() {
     echo "Compiling $BINARY_NAME..."
     rm -rf "$BINARY_NAME"
-    g++ --std=c++20 -o "$BINARY_NAME" "$CPP_FILE_PATH"
-    if [ $? -ne 0 ]; then
+
+    if ! g++ --std=c++20 -o "$BINARY_NAME" "$CPP_FILE_PATH"; then
         echo "Compilation failed. Aborting installation."
         exit 1
     fi
@@ -47,7 +47,7 @@ install_icon() {
 
 create_launcher_script() {
     echo "Creating launcher script at $LAUNCHER_SCRIPT_PATH..."
-    cat <<EOL > "$LAUNCHER_SCRIPT_PATH"
+    cat <<EOL >"$LAUNCHER_SCRIPT_PATH"
 #!/bin/bash
 # This script launches the $BINARY_NAME binary in a new terminal
 
@@ -59,7 +59,7 @@ EOL
 
 create_desktop_entry() {
     echo "Creating desktop entry at $LAUNCHER_PATH..."
-    cat <<EOL > "$LAUNCHER_PATH"
+    cat <<EOL >"$LAUNCHER_PATH"
 [Desktop Entry]
 Name=Arch Setup
 Comment=Run Arch Setup Script
@@ -76,8 +76,8 @@ EOL
     echo "Set executable permissions on $LAUNCHER_PATH."
 
     # Validate the desktop entry
-    desktop-file-validate "$LAUNCHER_PATH"
-    if [ $? -eq 0 ]; then
+
+    if ! desktop-file-validate "$LAUNCHER_PATH"; then
         echo "Desktop entry validation successful."
     else
         echo "Desktop entry validation failed."

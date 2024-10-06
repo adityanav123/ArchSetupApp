@@ -14,14 +14,14 @@ install_prerequisites() {
     echo "Installing prerequisites..."
 
     # Install makeself via yay
-    if ! command -v makeself &> /dev/null; then
+    if ! command -v makeself &>/dev/null; then
         echo "makeself is not installed. Installing via yay..."
-        if ! command -v yay &> /dev/null; then
+        if ! command -v yay &>/dev/null; then
             echo "yay AUR helper is not installed. Installing yay first..."
             sudo pacman -S --noconfirm --needed base-devel git
             git clone https://aur.archlinux.org/yay.git /tmp/yay_install
             cd /tmp/yay_install && makepkg -si --noconfirm
-            cd - # Return to the previous directory
+            cd - || exit # Return to the previous directory
             rm -rf /tmp/yay_install
         fi
         yay -S --noconfirm makeself
@@ -55,8 +55,8 @@ copy_files_to_package() {
 # Function to create the installer using makeself
 create_installer() {
     echo "Creating installer..."
-    makeself --nox11 "$PACKAGE_DIR" "$INSTALLER_NAME" "$INSTALLER_TITLE" "./$EXECUTOR_SCRIPT"
-    if [ $? -ne 0 ]; then
+
+    if ! makeself --nox11 "$PACKAGE_DIR" "$INSTALLER_NAME" "$INSTALLER_TITLE" "./$EXECUTOR_SCRIPT"; then
         echo "Failed to create the installer."
         exit 1
     fi
