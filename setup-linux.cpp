@@ -624,8 +624,27 @@ void setupShell() {
   std::cout << INPUT_COLOR << "Installing Homebrew...\n" << RESET_COLOR;
   runCommand(homebrewInstallCommand);
 
+  // Source Homebrew 
+  std::string sourceHomebrewCommand = "eval $(/opt/homebrew/bin/brew shellenv)";
+  if (isCommandSuccessful(sourceHomebrewCommand)) {
+    std::cout << SUCCESS_COLOR
+              << "Homebrew sourced successfully in this session.\n"
+              << RESET_COLOR;
+  } else {
+    std::cerr
+        << ERROR_COLOR
+        << "Failed to source Homebrew. You may need to restart the terminal.\n"
+        << RESET_COLOR;
+  }
+
   // Install Zsh Syntax Highlighting via Homebrew
   runCommand("brew install zsh-syntax-highlighting");
+
+  // Clone zsh-autosuggestions (already handled in .zshrc)
+  std::cout << INPUT_COLOR << "Installing zsh-autosuggestions...\n"
+            << RESET_COLOR;
+  runCommand("git clone https://github.com/zsh-users/zsh-autosuggestions "
+             "~/.zsh/zsh-autosuggestions");
 
   setZshAsDefaultShell();
 
@@ -782,6 +801,18 @@ void setupDoomEmacs() {
   }
 
   std::string doomConfigPath = std::string(getenv("HOME")) + "/.config/doom";
+  std::vector<std::string> filesToRemove = {doomConfigPath + "package.el",
+                                            doomConfigPath + "config.el",
+                                            doomConfigPath + "init.el"};
+
+  for (const auto &filePath : filesToRemove) {
+    if (fs::exists(filePath)) {
+      std::cout << INPUT_COLOR << "Removing existing file: " << filePath
+                << RESET_COLOR << "\n";
+      fs::remove(filePath); // Remove the file
+    }
+  }
+
   std::string cloneConfigCommand =
       "git clone https://github.com/adityanav123/MyDoomEmacsSetup " +
       doomConfigPath;
