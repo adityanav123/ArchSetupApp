@@ -9,6 +9,31 @@ EXECUTOR_SCRIPT="archsetup-executor.sh"
 CPP_FILE="setup-linux.cpp"
 ICON_FILE="archlinux.png"
 
+# Function to install prerequisites
+install_prerequisites() {
+    echo "Installing prerequisites..."
+
+    # Install makeself via yay
+    if ! command -v makeself &> /dev/null; then
+        echo "makeself is not installed. Installing via yay..."
+        if ! command -v yay &> /dev/null; then
+            echo "yay AUR helper is not installed. Installing yay first..."
+            sudo pacman -S --noconfirm --needed base-devel git
+            git clone https://aur.archlinux.org/yay.git /tmp/yay_install
+            cd /tmp/yay_install && makepkg -si --noconfirm
+            cd - # Return to the previous directory
+            rm -rf /tmp/yay_install
+        fi
+        yay -S --noconfirm makeself
+    else
+        echo "makeself is already installed."
+    fi
+
+    sudo pacman -S --noconfirm --needed clang llvm base-devel
+
+    echo "Prerequisites installed."
+}
+
 # Function to clean the package directory
 clean_package_directory() {
     echo "Cleaning package directory..."
@@ -45,6 +70,7 @@ cleanup() {
 }
 
 main() {
+    install_prerequisites
     clean_package_directory
     copy_files_to_package
     create_installer
