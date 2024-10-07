@@ -800,7 +800,7 @@ void setupDoomEmacs() {
     return;
   }
 
-  std::string doomConfigPath = std::string(getenv("HOME")) + "/.config/doom";
+  std::string doomConfigPath = std::string(getenv("HOME")) + "/.config/doom/";
   std::vector<std::string> filesToRemove = {doomConfigPath + "package.el",
                                             doomConfigPath + "config.el",
                                             doomConfigPath + "init.el"};
