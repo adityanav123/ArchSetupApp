@@ -1,13 +1,17 @@
 #!/bin/bash
 
-VERSION="1.2.0" # Installer Version Number
+set -e # Exit immediately if a command exits with a non-zero status
+
+VERSION="2.0" # Installer Version Number
 
 PACKAGE_DIR="./archsetup_package"
 INSTALLER_NAME="archsetup-installer-$VERSION.run"
 INSTALLER_TITLE="ArchSetup Installer $VERSION"
 EXECUTOR_SCRIPT="archsetup-executor.sh"
 CPP_FILE="setup-linux.cpp"
+HPP_FILE="setup-linux.hpp"
 ICON_FILE="archlinux.png"
+MAKEFILE="Makefile"
 
 # Function to install prerequisites
 install_prerequisites() {
@@ -38,7 +42,7 @@ install_prerequisites() {
 clean_package_directory() {
     echo "Cleaning package directory..."
     rm -rf "$PACKAGE_DIR"
-    mkdir "$PACKAGE_DIR"
+    mkdir -p "$PACKAGE_DIR"
     echo "Package directory cleaned."
 }
 
@@ -46,10 +50,54 @@ clean_package_directory() {
 copy_files_to_package() {
     echo "Copying files to package directory..."
     cp "$CPP_FILE" "$PACKAGE_DIR/"
+    cp "$HPP_FILE" "$PACKAGE_DIR/"
     cp "$EXECUTOR_SCRIPT" "$PACKAGE_DIR/"
     cp "$ICON_FILE" "$PACKAGE_DIR/"
+    cp "$MAKEFILE" "$PACKAGE_DIR/"
     chmod +x "$PACKAGE_DIR/$EXECUTOR_SCRIPT"
     echo "Files copied to package directory."
+}
+
+create_makefile() {
+    echo "Creating Makefile..."
+    cat >"$MAKEFILE" <<EOL
+# Compiler
+CXX := clang++
+
+# Compiler flags
+CXXFLAGS := -std=c++20 -Wall -Wextra -pedantic
+
+# Linker flags
+LDFLAGS := -lstdc++fs
+
+# Source files
+SOURCES := setup-linux.cpp
+
+# Object files
+OBJECTS := \$(SOURCES:.cpp=.o)
+
+# Executable name
+EXECUTABLE := arch-setup
+
+# Default target
+all: \$(EXECUTABLE)
+
+# Rule to build the executable
+\$(EXECUTABLE): \$(OBJECTS)
+	\$(CXX) \$(OBJECTS) -o \$@ \$(LDFLAGS)
+
+# Rule to compile source files to object files
+%.o: %.cpp
+	\$(CXX) \$(CXXFLAGS) -c \$< -o \$@
+
+# Clean target
+clean:
+	rm -f \$(OBJECTS) \$(EXECUTABLE)
+
+# Phony targets
+.PHONY: all clean
+EOL
+    echo "Makefile created."
 }
 
 # Function to create the installer using makeself
@@ -72,6 +120,7 @@ cleanup() {
 main() {
     install_prerequisites
     clean_package_directory
+    create_makefile
     copy_files_to_package
     create_installer
     cleanup

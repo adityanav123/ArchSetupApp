@@ -1,8 +1,10 @@
 #!/bin/bash
 
+set -e # Exit immediately if a command exits with a non-zero status.
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-BINARY_NAME="archsetup"
+BINARY_NAME="arch-setup"
 BINARY_PATH="/usr/local/bin/$BINARY_NAME"
 LAUNCHER_PATH="$HOME/.local/share/applications/${BINARY_NAME}.desktop"
 LAUNCHER_SCRIPT_PATH="$HOME/.local/bin/${BINARY_NAME}-launcher.sh"
@@ -10,78 +12,108 @@ CPP_FILE_PATH="$SCRIPT_DIR/setup-linux.cpp"
 ICON_NAME="archlinux.png"
 ICON_PATH="$HOME/.local/share/icons/$ICON_NAME"
 
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1"
+}
+
 request_sudo_access() {
-    echo "Requesting sudo access..."
+    log "Requesting sudo access..."
     sudo -v
 }
 
 compile_binary() {
-    echo "Compiling $BINARY_NAME..."
-    rm -rf "$BINARY_NAME"
+    log "Compiling $BINARY_NAME using Makefile..."
 
-    if ! g++ --std=c++20 -o "$BINARY_NAME" "$CPP_FILE_PATH"; then
-        echo "Compilation failed. Aborting installation."
+    # Ensure we're in the correct directory
+    cd "$SCRIPT_DIR" || {
+        log "Failed to change to script directory."
+        exit 1
+    }
+
+    # Check if Makefile exists
+    if [[ ! -f "Makefile" ]]; then
+        log "Error: Makefile not found in $SCRIPT_DIR"
         exit 1
     fi
-    echo "Compilation successful."
+
+    # Run make
+    if ! make; then
+        log "Compilation failed. Error output:"
+        make 2>&1 | tee compile_error.log
+        log "Compilation error log saved to compile_error.log"
+        log "Aborting installation."
+        exit 1
+    fi
+
+    # Check if the binary was created and is executable
+    if [[ ! -x "arch-setup" ]]; then
+        log "Binary 'arch-setup' was not created or is not executable. Aborting installation."
+        exit 1
+    fi
+
+    log "Compilation successful. Binary details:"
+    file "arch-setup"
+
+    log "Binary dependencies:"
+    ldd "arch-setup" || log "ldd command failed or not available."
+
+    log "Compilation complete."
 }
 
 install_binary() {
-    echo "Installing $BINARY_NAME to $BINARY_PATH..."
+    log "Installing $BINARY_NAME to $BINARY_PATH..."
     sudo mv "$BINARY_NAME" "$BINARY_PATH"
-    sudo chmod +x "$BINARY_PATH"
-    echo "Binary installed successfully."
+    sudo chmod 755 "$BINARY_PATH"
+    log "Binary installed successfully."
 }
 
 create_directories() {
-    echo "Creating necessary directories..."
+    log "Creating necessary directories..."
     mkdir -p "$(dirname "$LAUNCHER_PATH")"
     mkdir -p "$(dirname "$LAUNCHER_SCRIPT_PATH")"
     mkdir -p "$(dirname "$ICON_PATH")"
 }
 
 install_icon() {
-    echo "Installing icon to $ICON_PATH..."
+    log "Installing icon to $ICON_PATH..."
     cp "$SCRIPT_DIR/$ICON_NAME" "$ICON_PATH"
+    chmod 644 "$ICON_PATH"
 }
 
 create_launcher_script() {
-    echo "Creating launcher script at $LAUNCHER_SCRIPT_PATH..."
+    log "Creating launcher script at $LAUNCHER_SCRIPT_PATH..."
     cat <<EOL >"$LAUNCHER_SCRIPT_PATH"
 #!/bin/bash
 # This script launches the $BINARY_NAME binary in a new terminal
 
-gnome-terminal -- bash -c "$BINARY_PATH; exec bash"
+gnome-terminal -- bash -c "sudo $BINARY_PATH; exec bash"
 EOL
-    chmod +x "$LAUNCHER_SCRIPT_PATH"
-    echo "Launcher script created successfully."
+    chmod 755 "$LAUNCHER_SCRIPT_PATH"
+    log "Launcher script created successfully."
 }
 
 create_desktop_entry() {
-    echo "Creating desktop entry at $LAUNCHER_PATH..."
+    log "Creating desktop entry at $LAUNCHER_PATH..."
     cat <<EOL >"$LAUNCHER_PATH"
 [Desktop Entry]
 Name=Arch Setup
 Comment=Run Arch Setup Script
-Exec=$LAUNCHER_SCRIPT_PATH
+Exec=pkexec $LAUNCHER_SCRIPT_PATH
 Icon=$ICON_PATH
 Terminal=false
 Type=Application
-Categories=Utility;
+Categories=System;
 EOL
-    echo "Desktop entry created successfully."
+    chmod 644 "$LAUNCHER_PATH"
+    log "Desktop entry created successfully."
 
-    # Set file permissions
-    chmod +x "$LAUNCHER_PATH"
-    echo "Set executable permissions on $LAUNCHER_PATH."
-
-    # Validate the desktop entry
-
-    if ! desktop-file-validate "$LAUNCHER_PATH"; then
-        echo "Desktop entry validation successful."
+    if desktop-file-validate "$LAUNCHER_PATH"; then
+        log "Desktop entry validation successful."
     else
-        echo "Desktop entry validation failed."
+        log "Desktop entry validation failed."
     fi
+
+    update-desktop-database "$HOME/.local/share/applications"
 }
 
 install_app() {
@@ -92,37 +124,37 @@ install_app() {
     install_icon
     create_launcher_script
     create_desktop_entry
-    echo "Installation complete. You can run '$BINARY_NAME' from the terminal or use the Arch Setup application from your desktop."
+    log "Installation complete. You can run '$BINARY_NAME' from the terminal or use the Arch Setup application from your desktop."
 }
 
 remove_app() {
-    echo "Removing any previous $BINARY_NAME installation..."
+    log "Removing any previous $BINARY_NAME installation..."
 
     # Remove binary
     if [ -f "$BINARY_PATH" ]; then
         sudo rm "$BINARY_PATH"
-        echo "Removed $BINARY_PATH"
+        log "Removed $BINARY_PATH"
     fi
 
     # Remove launcher script
     if [ -f "$LAUNCHER_SCRIPT_PATH" ]; then
         rm "$LAUNCHER_SCRIPT_PATH"
-        echo "Removed $LAUNCHER_SCRIPT_PATH"
+        log "Removed $LAUNCHER_SCRIPT_PATH"
     fi
 
     # Remove .desktop entry
     if [ -f "$LAUNCHER_PATH" ]; then
         rm "$LAUNCHER_PATH"
-        echo "Removed $LAUNCHER_PATH"
+        log "Removed $LAUNCHER_PATH"
     fi
 
     # Remove icon
     if [ -f "$ICON_PATH" ]; then
         rm "$ICON_PATH"
-        echo "Removed $ICON_PATH"
+        log "Removed $ICON_PATH"
     fi
 
-    echo "Removal complete."
+    log "Removal complete."
 }
 
 main() {

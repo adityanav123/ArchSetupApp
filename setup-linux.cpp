@@ -1,97 +1,4 @@
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
-#include <functional>
-#include <iostream>
-#include <regex>
-#include <string>
-#include <thread>
-#include <vector>
-
-namespace fs = std::filesystem;
-
-// Gruvbox color palette
-constexpr const char *RESET_COLOR = "\033[0m";
-constexpr const char *MENU_COLOR = "\033[38;5;208m";    // Orange
-constexpr const char *OPTION_COLOR = "\033[38;5;214m";  // Bright Orange
-constexpr const char *INPUT_COLOR = "\033[38;5;142m";   // Green
-constexpr const char *ERROR_COLOR = "\033[38;5;167m";   // Red
-constexpr const char *SUCCESS_COLOR = "\033[38;5;108m"; // Aqua
-
-constexpr const char *MENU_SEPARATOR = "---------------------------------";
-
-// Regex for pacman/yay/flatpak
-std::regex
-    pacmanYayPattern(R"((\S+\/\S+)\s+\[(\S+)\]\s*(\([^)]+\))?\s*-\s*(.*))");
-std::regex flatpakPattern(R"((\S+)\s+\(([^)]+)\)\s+(.*))");
-
-// Define a menu item structure
-struct MenuItem {
-  std::string description;
-  std::function<void()> action;
-  std::function<void()> preview;
-};
-
-// Function Prototypes
-std::vector<std::string> parse_string(const std::string &input, char delimiter);
-void parseYayResults(
-    const std::string &result,
-    std::vector<std::tuple<std::string, std::string, std::string, std::string,
-                           bool>> &matchingPackages);
-void parsePacmanYayResults(
-    const std::string &result,
-    std::vector<std::tuple<std::string, std::string, std::string, std::string,
-                           bool>> &matchingPackages,
-    const std::string &source);
-std::string runFlatpakCommand(const std::string &packageName,
-                              const std::string &columns);
-void fetchFlatpakDetails(
-    const std::string &packageName,
-    std::vector<std::tuple<std::string, std::string, std::string, std::string,
-                           bool>> &matchingPackages);
-void parseFlags(int argc, char *argv[]);
-void showProgressBar(int totalSteps);
-void runCommand(const std::string &command);
-bool isCommandSuccessful(const std::string &command);
-bool isPackageInstalled(const std::string &packageName);
-bool installPackageWithProgress(const std::string &packageName,
-                                const std::string &extraFlags = "");
-bool installPackage(const std::string &packageName,
-                    const std::string &extraFlags = "");
-bool downloadFile(const std::string &url, const std::string &outputFilePath);
-bool isFileValid(const std::string &filePath);
-void applyConfig(const std::string &gistUrl, const std::string &configPath);
-void setupFlatpak();
-void setZshAsDefaultShell();
-void installTerminal(const std::string &terminalName,
-                     const std::string &configUrl = "",
-                     const std::string &configPath = "");
-void setupWezTerm();
-void setupKitty();
-void setupTerminal();
-void setupStarshipTheme();
-void setupShell();
-void gamingSetup();
-void developerSetup();
-void setupLVim();
-void setupDoomEmacs();
-void ensureYayInstalled();
-void ensureFlatpakInstalled();
-std::vector<
-    std::tuple<std::string, std::string, std::string, std::string, bool>>
-searchForPackages(const std::string &packageName);
-void displayMatchingPackages(
-    const std::vector<std::tuple<std::string, std::string, std::string,
-                                 std::string, bool>> &matchingPackages);
-void downloadPackage();
-void askForSudoPassword();
-void printSeparator();
-std::vector<std::string> getSimpleMenuDescriptions();
-std::vector<std::string> getDetailedMenuDescriptions();
-void displayMenu(const std::vector<MenuItem> &menuItems);
-void handleMenuChoice(const std::vector<MenuItem> &menuItems, int choice);
-void setupYay();
-void showMainMenuAndHandleInput();
+#include "setup-linux.hpp"
 
 // Parse String using delimiter
 std::vector<std::string> parse_string(const std::string &input,
@@ -107,34 +14,9 @@ std::vector<std::string> parse_string(const std::string &input,
   return result;
 }
 
-// Parse Yay output
-void parseYayResults(
-    const std::string &result,
-    std::vector<std::tuple<std::string, std::string, std::string, std::string,
-                           bool>> &matchingPackages) {
-
-  std::regex yayPattern(
-      R"((\S+)\/(\S+)\s+([\d\.]+-\d+)(\s+\[installed\])?\s*\n\s+(.*))");
-  std::smatch match;
-  std::string::const_iterator searchStart(result.cbegin());
-  while (std::regex_search(searchStart, result.cend(), match, yayPattern)) {
-    std::string packageName = match[2].str();
-    std::string version = match[3].str();
-    std::string description = match[5].str();
-    bool installed = match[4].matched;
-
-    matchingPackages.emplace_back(packageName, version, description, "yay",
-                                  installed);
-    searchStart = match.suffix().first;
-  }
-}
-
-void parsePacmanYayResults(
-    const std::string &result,
-    std::vector<std::tuple<std::string, std::string, std::string, std::string,
-                           bool>> &matchingPackages,
-    const std::string &source) {
-
+void parsePacmanYayResults(const std::string &result,
+                           std::vector<PackageStruct> &matchingPackages,
+                           const std::string &source) {
   std::regex pacmanYayPattern(
       R"((\S+)\/(\S+)\s+([\d\.]+-\d+)(\s*\[installed\])?\s*\n\s*(.*))");
   std::smatch match;
@@ -146,9 +28,36 @@ void parsePacmanYayResults(
     std::string description = match[5].str();
     bool installed = match[4].matched;
 
-    matchingPackages.emplace_back(packageName, version, description, source,
-                                  installed);
+    matchingPackages.emplace_back(packageName, version, description, source);
     searchStart = match.suffix().first;
+  }
+}
+
+void parseYayResults(const std::string &result,
+                     std::vector<PackageStruct> &matchingPackages) {
+  std::istringstream iss(result);
+  std::string line;
+  std::string currentPackage, currentVersion, currentDescription;
+
+  while (std::getline(iss, line)) {
+    if (line.substr(0, 8) == "Package:") {
+      if (!currentPackage.empty()) {
+        matchingPackages.emplace_back(currentPackage, currentVersion,
+                                      currentDescription, "AUR");
+        currentPackage = currentVersion = currentDescription = "";
+      }
+      currentPackage = line.substr(9);
+    } else if (line.substr(0, 8) == "Version:") {
+      currentVersion = line.substr(9);
+    } else if (line.substr(0, 12) == "Description:") {
+      currentDescription = line.substr(13);
+    }
+  }
+
+  // Add the last package if exists
+  if (!currentPackage.empty()) {
+    matchingPackages.emplace_back(currentPackage, currentVersion,
+                                  currentDescription, "AUR");
   }
 }
 
@@ -173,10 +82,8 @@ std::string runFlatpakCommand(const std::string &packageName,
   return result;
 }
 
-void fetchFlatpakDetails(
-    const std::string &packageName,
-    std::vector<std::tuple<std::string, std::string, std::string, std::string,
-                           bool>> &matchingPackages) {
+void fetchFlatpakDetails(const std::string &packageName,
+                         std::vector<PackageStruct> &matchingPackages) {
   std::string nameResult = runFlatpakCommand(packageName, "name");
   std::string descriptionResult = runFlatpakCommand(packageName, "description");
   std::string versionResult = runFlatpakCommand(packageName, "version");
@@ -196,7 +103,7 @@ void fetchFlatpakDetails(
          std::getline(descriptionStream, descriptionLine) &&
          std::getline(versionStream, versionLine)) {
     matchingPackages.emplace_back(nameLine, versionLine, descriptionLine,
-                                  std::string("flatpak"), false);
+                                  "Flatpak");
   }
 }
 
@@ -501,8 +408,7 @@ void setupKitty() {
 void setupTerminal() {
   std::cout << INPUT_COLOR << "Which terminal would you like to install? \n"
             << RESET_COLOR;
-  std::cout << OPTION_COLOR << "(1) WezTerm \n(2) Kitty \n(3) Other\n"
-            << RESET_COLOR;
+  std::cout << OPTION_COLOR << "(1) WezTerm \n(2) Kitty\n" << RESET_COLOR;
 
   int terminalChoice;
   std::cin >> terminalChoice;
@@ -516,17 +422,6 @@ void setupTerminal() {
     std::cout << INPUT_COLOR << "Setting up Kitty...\n" << RESET_COLOR;
     setupKitty();
     break;
-  case 3: {
-    std::cout << INPUT_COLOR
-              << "Please enter the name of the terminal emulator to install: "
-              << RESET_COLOR;
-    std::string terminalName;
-    std::cin >> terminalName;
-
-    // For other terminal emulators, no config is provided
-    installTerminal(terminalName);
-    break;
-  }
   default:
     std::cout << ERROR_COLOR << "Invalid choice. Please try again.\n"
               << RESET_COLOR;
@@ -715,8 +610,8 @@ void developerSetup() {
 void setupLVim() {
   std::cout << INPUT_COLOR << "Setting up LunarVim...\n" << RESET_COLOR;
   std::vector<std::string> lvim_dependencies{
-      "git",    "make",    "python-pip", "npm",
-      "nodejs", "ripgrep", "lazygit",    "python-pynvim"};
+      "git",     "make",    "python-pip",    "npm", "nodejs",
+      "ripgrep", "lazygit", "python-pynvim", "curl"};
   for (const auto &pkg : lvim_dependencies)
     installPackage(pkg, "--needed");
 
@@ -736,10 +631,11 @@ void setupLVim() {
   runCommand("source ~/.profile");
 
   // Test npm global setup by installing a package
-  std::cout << INPUT_COLOR << "Testing npm global installation with jshint...\n"
-            << RESET_COLOR;
-  runCommand("npm install -g jshint");
-
+  /* std::cout << INPUT_COLOR << "Testing npm global installation with
+   jshint...\n"
+             << RESET_COLOR;
+   runCommand("npm install -g jshint");
+ */
   // Cargo Setup
   std::string cargoInstallCommand =
       "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y";
@@ -788,6 +684,8 @@ void setupDoomEmacs() {
     return;
   }
 
+  std::cout << SUCCESS_COLOR << "Starting Doom Install!" << RESET_COLOR
+            << std::endl;
   // DOOM INSTALL
   std::string doomInstallCommand = emacsConfigPath + "/bin/doom install";
 
@@ -829,7 +727,8 @@ void setupDoomEmacs() {
   }
 
   // Install 'emms' package
-  std::cout << INPUT_COLOR << "Installing emms package...\n" << RESET_COLOR;
+  std::cout << INPUT_COLOR << "Installing emms (Emacs Multimedia package)...\n"
+            << RESET_COLOR;
   if (!installPackage("emms")) {
     std::cerr << ERROR_COLOR << "Failed to install emms package.\n"
               << RESET_COLOR;
@@ -953,14 +852,10 @@ void ensureFlatpakInstalled() {
   }
 }
 
-std::vector<
-    std::tuple<std::string, std::string, std::string, std::string, bool>>
-searchForPackages(const std::string &packageName) {
-  std::vector<
-      std::tuple<std::string, std::string, std::string, std::string, bool>>
-      matchingPackages;
+// Search for Packages
+std::vector<PackageStruct> searchForPackages(const std::string &packageName) {
+  std::vector<PackageStruct> matchingPackages;
 
-  // Pacman search
   std::string pacmanCommand = "pacman -Ss " + packageName;
   std::array<char, 128> buffer;
   std::string result;
@@ -973,8 +868,18 @@ searchForPackages(const std::string &packageName) {
     parsePacmanYayResults(result, matchingPackages, "pacman");
   }
 
-  // Yay search
-  std::string yayCommand = "yay -Ss " + packageName;
+  std::string yayCommand =
+      "yay -Ss \"" + packageName +
+      "\" | awk '"
+      "/aur\\// {"
+      "  split($1, a, \"/\");"
+      "  package = a[2];"
+      "  version = $2;"
+      "  getline;"
+      "  description = $0;"
+      "  printf \"Package: %s\\nVersion: %s\\nDescription: %s\\n\\n\", "
+      "package, version, description;"
+      "}'";
   result.clear();
   pipe = popen(yayCommand.c_str(), "r");
   if (pipe) {
@@ -982,124 +887,142 @@ searchForPackages(const std::string &packageName) {
       result += buffer.data();
     }
     pclose(pipe);
-    parseYayResults(result,
-                    matchingPackages); // Call the new parseYayResults here
+    parseYayResults(result, matchingPackages);
   }
 
-  // Flatpak search
   fetchFlatpakDetails(packageName, matchingPackages);
 
   return matchingPackages;
 }
 
-void displayMatchingPackages(
-    const std::vector<std::tuple<std::string, std::string, std::string,
-                                 std::string, bool>> &matchingPackages) {
-
-  std::cout << "Packages found:\n";
-  for (size_t i = 0; i < matchingPackages.size(); ++i) {
-    bool installed = std::get<4>(matchingPackages[i]);
-    const char *color = installed ? SUCCESS_COLOR : OPTION_COLOR;
-
-    std::cout << (i + 1) << ". " << color << std::get<0>(matchingPackages[i])
-              << RESET_COLOR << " : " << std::get<1>(matchingPackages[i])
-              << " (" << MENU_COLOR << std::get<3>(matchingPackages[i])
-              << RESET_COLOR << ")\n"
-              << "\t" << std::get<2>(matchingPackages[i]) << "\n";
-
-    if (installed) {
-      std::cout << "\t" << SUCCESS_COLOR << "[installed]" << RESET_COLOR
-                << "\n";
-    }
-  }
-}
-
 void downloadPackage() {
+  const int ITEMS_PER_PAGE = 10;
   std::string packageName;
-  std::cout << INPUT_COLOR
-            << "Enter the package name you want to search for (or type 'none' "
-               "to return to the main menu): "
-            << RESET_COLOR;
-  std::cin >> packageName;
 
-  if (packageName == "none" || packageName == "exit") {
-    std::cout << INPUT_COLOR << "Returning to the main menu...\n"
-              << RESET_COLOR;
-    return;
-  }
+  while (true) {
+    clearScreen();
+    std::cout << MENU_COLOR
+              << "=== Package Search and Download ===" << RESET_COLOR << "\n\n";
+    std::cout << INPUT_COLOR
+              << "Enter the package name you want to search for\n"
+              << "(or enter 'q' to return to the main menu): " << RESET_COLOR;
 
-  auto matchingPackages = searchForPackages(packageName);
+    std::getline(std::cin, packageName);
 
-  if (matchingPackages.empty()) {
-    std::cout << ERROR_COLOR
-              << "No matching packages found for: " << packageName << "\n"
-              << RESET_COLOR;
-    return;
-  }
-
-  displayMatchingPackages(matchingPackages);
-
-  std::cout << INPUT_COLOR
-            << "Enter the numbers of the packages to install (comma-separated, "
-               "or type 'none' to return): "
-            << RESET_COLOR;
-  std::string choices;
-  std::cin >> choices;
-
-  if (choices == "none" || choices == "exit") {
-    std::cout << INPUT_COLOR << "Returning to the main menu...\n"
-              << RESET_COLOR;
-    return;
-  }
-
-  std::vector<
-      std::tuple<std::string, std::string, std::string, std::string, bool>>
-      selectedPackages;
-
-  std::stringstream ss(choices);
-  std::string item;
-  while (std::getline(ss, item, ',')) {
-    int index;
-    if (!(std::stringstream(item) >> index)) {
-      std::cout << ERROR_COLOR
-                << "Invalid input! Please enter a valid number.\n"
+    if (packageName == "q" || packageName == "Q") {
+      std::cout << INPUT_COLOR << "Returning to the main menu...\n"
                 << RESET_COLOR;
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      return;
+    }
+
+    auto matchingPackages = searchForPackages(packageName);
+
+    if (matchingPackages.empty()) {
+      std::cout << ERROR_COLOR
+                << "No matching packages found for: " << packageName << "\n"
+                << RESET_COLOR;
+      std::cout << "Press Enter to try again...";
+      std::cin.get();
       continue;
     }
-    if (index >= 1 && index <= static_cast<int>(matchingPackages.size())) {
-      selectedPackages.push_back(matchingPackages[index - 1]);
-    } else {
-      std::cout << ERROR_COLOR
-                << "Invalid index! Please choose a valid number.\n"
+
+    int currentPage = 0;
+    int totalPages =
+        (matchingPackages.size() + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
+
+    while (true) {
+      clearScreen();
+      std::cout << MENU_COLOR << "=== Search Results (Page "
+                << (currentPage + 1) << " of " << totalPages
+                << ") ===" << RESET_COLOR << "\n\n";
+
+      int startIdx = currentPage * ITEMS_PER_PAGE;
+      int endIdx = std::min(startIdx + ITEMS_PER_PAGE,
+                            static_cast<int>(matchingPackages.size()));
+
+      for (int i = startIdx; i < endIdx; ++i) {
+        const auto &pkg = matchingPackages[i];
+        bool installed = isPackageInstalled(pkg.name);
+        const char *color = installed ? SUCCESS_COLOR : OPTION_COLOR;
+
+        std::cout << (i + 1) << ". " << color << pkg.name << RESET_COLOR
+                  << " : " << pkg.version << " (" << MENU_COLOR
+                  << pkg.sourceOfPackage << RESET_COLOR << ")\n"
+                  << "\t" << pkg.description << "\n";
+
+        if (installed) {
+          std::cout << "\t" << SUCCESS_COLOR << "[installed]" << RESET_COLOR
+                    << "\n";
+        }
+        std::cout << "\n";
+      }
+
+      std::cout << INPUT_COLOR
+                << "Enter package numbers to install (comma-separated),\n"
+                << "n for next page, p for previous page, or q to go back: "
                 << RESET_COLOR;
-    }
-  }
 
-  if (selectedPackages.empty()) {
-    std::cout << ERROR_COLOR << "No valid packages selected. Aborting...\n"
-              << RESET_COLOR;
-    return;
-  }
+      std::string input;
+      std::getline(std::cin, input);
 
-  for (const auto &pkg : selectedPackages) {
-    const auto &packageName = std::get<0>(pkg);
-    const auto &source = std::get<3>(pkg);
+      if (input == "q" || input == "Q") {
+        break;
+      }
 
-    std::cout << INPUT_COLOR << "Installing " << packageName << " from "
-              << source << "...\n"
-              << RESET_COLOR;
+      if (input == "n" || input == "N") {
+        currentPage = (currentPage + 1) % totalPages;
+        continue;
+      }
 
-    if (source == "pacman") {
-      installPackage(packageName, "--needed");
-    } else if (source == "yay") {
-      // Using a different function to parse yay results correctly
-      installPackage(packageName, "--needed");
-    } else if (source == "flatpak") {
-      std::string flatpakCommand = "flatpak install -y flathub " + packageName;
-      runCommand(flatpakCommand);
-    } else {
-      std::cerr << ERROR_COLOR << "Unknown package source: " << source << "\n"
+      if (input == "p" || input == "P") {
+        currentPage = (currentPage - 1 + totalPages) % totalPages;
+        continue;
+      }
+
+      std::vector<PackageStruct> selectedPackages;
+      std::stringstream ss(input);
+      std::string item;
+      while (std::getline(ss, item, ',')) {
+        try {
+          int index = std::stoi(item) - 1;
+          if (index >= 0 && index < static_cast<int>(matchingPackages.size())) {
+            selectedPackages.push_back(matchingPackages[index]);
+          } else {
+            std::cout << ERROR_COLOR << "Invalid index: " << (index + 1)
+                      << ". Skipping.\n"
+                      << RESET_COLOR;
+          }
+        } catch (const std::invalid_argument &) {
+          std::cout << ERROR_COLOR << "Invalid input: " << item
+                    << ". Skipping.\n"
+                    << RESET_COLOR;
+        }
+      }
+
+      if (selectedPackages.empty()) {
+        std::cout << ERROR_COLOR
+                  << "No valid packages selected. Press Enter to continue...\n"
+                  << RESET_COLOR;
+        std::cin.get();
+        continue;
+      }
+
+      clearScreen();
+      std::cout << MENU_COLOR << "=== Installing Packages ===" << RESET_COLOR
+                << "\n\n";
+      for (const auto &pkg : selectedPackages) {
+        std::cout << INPUT_COLOR << "Installing " << pkg.name << "...\n"
+                  << RESET_COLOR;
+        installPackage(pkg.name, "--needed");
+        std::cout << "\n";
+      }
+
+      std::cout << SUCCESS_COLOR
+                << "Installation complete. Press Enter to continue...\n"
                 << RESET_COLOR;
+      std::cin.get();
+      break;
     }
   }
 }
@@ -1114,9 +1037,6 @@ void askForSudoPassword() {
   }
 }
 
-void printSeparator() {
-  std::cout << MENU_COLOR << "\n" << MENU_SEPARATOR << "\n" << RESET_COLOR;
-}
 
 // Main menu and input handling
 std::vector<std::string> getSimpleMenuDescriptions() {
@@ -1138,16 +1058,27 @@ std::vector<std::string> getDetailedMenuDescriptions() {
 }
 
 void displayMenu(const std::vector<MenuItem> &menuItems) {
-  std::vector<std::string> descriptions =
-      verboseMode ? getDetailedMenuDescriptions() : getSimpleMenuDescriptions();
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 
-  std::cout << MENU_COLOR << "\n----- Arch Linux Setup Menu -----"
-            << RESET_COLOR << "\n";
-  for (size_t i = 0; i < menuItems.size(); ++i) {
-    std::cout << OPTION_COLOR << (i + 1) << ". " << RESET_COLOR
-              << descriptions[i] << "\n";
-  }
-  std::cout << MENU_COLOR << MENU_SEPARATOR << RESET_COLOR << "\n";
+    clearScreen();
+
+    int contentHeight = menuItems.size() + 6;
+    int verticalPadding = (w.ws_row - contentHeight) / 2;
+
+    for (int i = 0; i < verticalPadding; ++i) {
+        std::cout << "\n";
+    }
+
+    printHeader("Arch Linux Setup Menu");
+
+    for (size_t i = 0; i < menuItems.size(); ++i) {
+        std::cout << GRUVBOX_YELLOW << " [" << (i + 1) << "] " << RESET_COLOR 
+                  << GRUVBOX_FG << menuItems[i].description << RESET_COLOR << "\n";
+    }
+
+    printSeparator();
+    printPrompt("Choose an option (1-" + std::to_string(menuItems.size()) + "), or [q] to quit");
 }
 
 void handleMenuChoice(const std::vector<MenuItem> &menuItems, int choice) {
@@ -1187,33 +1118,101 @@ void setupYay() {
   }
 }
 
-void showMainMenuAndHandleInput() {
-  std::vector<MenuItem> menuItems = {
-      {"Setup Shell (Zsh)", setupShell},
-      {"Install Developer Tools", developerSetup},
-      {"Setup Gaming (NVIDIA only)", gamingSetup},
-      {"Install LunarVim", setupLVim},
-      {"Install Doom Emacs", setupDoomEmacs},
-      {"Install Terminals", setupTerminal},
-      {"Search & Download a Package", downloadPackage},
-      {"Setup Yay (AUR Helper)", setupYay},
-      {"Setup Flatpak", setupFlatpak},
-      {"Exit", [] {
-         std::cout << INPUT_COLOR << "Exiting setup. Goodbye!\n" << RESET_COLOR;
-       }}};
+// Menus
+void setupShellMenu() {
+    std::vector<std::pair<std::string, std::function<void()>>> options = {
+        {"Setup Zsh and dependencies", setupShell},
+        {"Configure Starship theme", setupStarshipTheme}
+    };
 
-  int choice = 0;
-  while (choice != static_cast<int>(menuItems.size())) {
-    displayMenu(menuItems);
-    std::cout << INPUT_COLOR << "Choose Option: " << RESET_COLOR;
-    std::cin >> choice;
-    handleMenuChoice(menuItems, choice);
-  }
+    while (true) {
+        clearScreen();
+        printHeader("Setup Shell (Zsh)");
+
+        for (size_t i = 0; i < options.size(); ++i) {
+            std::cout << GRUVBOX_YELLOW << " [" << (i + 1) << "] " << RESET_COLOR 
+                      << GRUVBOX_FG << options[i].first << RESET_COLOR << "\n";
+        }
+
+        printSeparator();
+        printPrompt("Choose an option (1-" + std::to_string(options.size()) + "), or [q] to go back");
+
+        std::string choice;
+        std::getline(std::cin, choice);
+
+        if (choice == "q" || choice == "Q") {
+            return;
+        }
+
+        try {
+            int choiceNum = std::stoi(choice);
+            if (choiceNum > 0 && choiceNum <= static_cast<int>(options.size())) {
+                clearScreen();
+                options[choiceNum - 1].second(); // Execute the chosen function
+                std::cout << "\nPress Enter to continue...";
+                std::cin.get();
+            } else {
+                throw std::out_of_range("Invalid choice");
+            }
+        } catch (const std::exception&) {
+            std::cout << ERROR_COLOR << "Invalid choice. Please try again.\n" << RESET_COLOR;
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    }
+}
+
+void developerSetupMenu() {
+  singleActionMenuTemplate("Install Developer Tools", "Install developer tools",
+                           developerSetup);
+}
+
+void gamingSetupMenu() {
+  singleActionMenuTemplate("Setup Gaming", "Set up gaming environment",
+                           gamingSetup);
+}
+
+void setupLVimMenu() {
+  singleActionMenuTemplate("Setup LVim", "Setup LunarVim", setupLVim);
+}
+
+void setupDoomEmacsMenu() {
+  singleActionMenuTemplate("Setup Doom-Emacs", "Setup Doom Emacs",
+                           setupDoomEmacs);
+}
+
+void setupTerminalMenu() {
+  std::vector<std::pair<std::string, std::function<void()>>> options = {
+      {"Install WezTerm", setupWezTerm}, {"Install Kitty", setupKitty}};
+  colorizedMenuTemplate("Install Terminals", options);
+}
+
+void setupYayMenu() {
+  singleActionMenuTemplate("Setup Yay", "Setup Yay", setupYay);
+}
+
+void setupFlatpakMenu() {
+  singleActionMenuTemplate("Setup Flatpak", "Setup Flatpak", setupFlatpak);
+}
+
+void showMainMenuAndHandleInput() {
+  std::vector<std::pair<std::string, std::function<void()>>> options = {
+      {"Setup Shell (Zsh)", setupShellMenu},
+      {"Install Developer Tools", developerSetupMenu},
+      {"Setup Gaming", gamingSetupMenu},
+      {"Install LunarVim", setupLVimMenu},
+      {"Install Doom Emacs", setupDoomEmacsMenu},
+      {"Install Terminals", setupTerminalMenu},
+      {"Search & Download a Package", downloadPackage},
+      {"Setup Yay (AUR Helper)", setupYayMenu},
+      {"Setup Flatpak", setupFlatpakMenu}};
+  colorizedMenuTemplate("Arch Linux Setup Menu", options);
 }
 
 int main(int argc, char *argv[]) {
+  std::cout << GRUVBOX_BG << GRUVBOX_FG; // Set background and foreground colors
   parseFlags(argc, argv);
   askForSudoPassword();
   showMainMenuAndHandleInput();
+  std::cout << RESET_COLOR;
   return 0;
 }
